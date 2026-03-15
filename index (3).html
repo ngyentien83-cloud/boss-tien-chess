@@ -1,0 +1,1304 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Chess — Boss Tien: Modulo Era</title>
+    <style>
+        :root { 
+            --bg: #030508; 
+            --panel: #0a0f18; 
+            --accent: #dc2626; 
+            --board-light: #cbd5e1; 
+            --board-dark: #334155;
+            --text: #f8fafc;
+            --gold: #facc15;
+            --ce-red: #ff0033;
+            --meta-blue: #00f2ff;
+            --shop-bg: #0f172a;
+        }
+        body { 
+            margin: 0; font-family: 'Inter', sans-serif; 
+            background-color: var(--bg); color: var(--text); 
+            display: flex; justify-content: center; align-items: center; 
+            min-height: 100vh; overflow: hidden;
+            transition: background-color 1s ease, filter 2s ease;
+        }
+
+        /* --- BACKGROUND EVOLUTIONS --- */
+        body.domain-active:not(.flow-state) {
+            background-color: #1a0505;
+            background-image: radial-gradient(circle at center, rgba(60, 0, 0, 0.8), #000);
+        }
+        body.flow-state:not(.domain-active) {
+            background-color: #000914;
+            background-image: 
+                linear-gradient(rgba(0, 242, 255, 0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.15) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: flow-pan 15s linear infinite;
+        }
+        body.domain-active.flow-state {
+            background-color: #1a0000;
+            background-image: 
+                radial-gradient(circle at center, rgba(80, 0, 0, 0.9), transparent),
+                linear-gradient(rgba(255, 0, 51, 0.25) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 0, 51, 0.25) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            animation: flow-pan 10s linear infinite;
+        }
+        @keyframes flow-pan {
+            0% { background-position: 0 0, 0 0, 0 0; }
+            100% { background-position: 0 0, 40px 40px, 40px 40px; }
+        }
+
+        /* --- LAYOUT & BOARD --- */
+        .container { display: flex; gap: 30px; padding: 20px; align-items: flex-start; max-width: 100vw; z-index: 10; position: relative; }
+        .board-container { position: relative; }
+        
+        .board { 
+            width: 600px; height: 600px; 
+            display: grid; grid-template-columns: repeat(8, 1fr); 
+            border: 8px solid var(--panel); 
+            border-radius: 4px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            position: relative;
+            background: var(--panel);
+            transition: all 0.5s;
+        }
+
+        .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        .square { 
+            width: 75px; height: 75px; 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 52px; cursor: pointer; position: relative;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+        .light { background: var(--board-light); color: #0f172a; }
+        .dark { background: var(--board-dark); color: #f1f5f9; }
+        
+        .domain-active .light { background: #4a1a1a; color: #fecaca; }
+        .domain-active .dark { background: #2d0a0a; color: #fecaca; }
+        .flow-state:not(.domain-active) .dark { background: #0f172a; color: #38bdf8; }
+        .flow-state:not(.domain-active) .light { background: #1e293b; color: #38bdf8; }
+
+        .selected { background: var(--gold) !important; }
+        .last-move { background: rgba(220, 38, 38, 0.4) !important; }
+        
+        .metavision-trail {
+            box-shadow: inset 0 0 25px var(--meta-blue) !important;
+            animation: meta-pulse 1.5s infinite;
+        }
+        @keyframes meta-pulse {
+            0%, 100% { box-shadow: inset 0 0 15px var(--meta-blue); }
+            50% { box-shadow: inset 0 0 35px var(--meta-blue); }
+        }
+
+        /* --- PLAYER BUFFS --- */
+        .tanjiro-aura {
+            box-shadow: inset 0 0 25px #ff4500, 0 0 20px #ff4500 !important;
+            animation: fire-pulse 1s infinite alternate;
+        }
+        @keyframes fire-pulse {
+            from { box-shadow: inset 0 0 10px #ff4500, 0 0 10px #ff4500; }
+            to { box-shadow: inset 0 0 35px #ff4500, 0 0 35px #ffb300; }
+        }
+
+        .ghost-square::after { content: '💀'; position: absolute; font-size: 20px; opacity: 0.6; pointer-events: none;}
+        .hazard-square::before {
+            content: ''; position: absolute; width: 100%; height: 100%;
+            background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(220, 38, 38, 0.4) 10px, rgba(220, 38, 38, 0.4) 20px);
+            z-index: 1; pointer-events: none;
+        }
+
+        .piece { 
+            z-index: 10; transition: transform 0.2s, filter 0.2s;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); user-select: none;
+        }
+        .direct-shot-aura { filter: drop-shadow(0 0 15px var(--gold)) !important; }
+
+        .puzzle-piece {
+            position: absolute; width: 18px; height: 18px;
+            clip-path: polygon(10% 0, 90% 0, 100% 20%, 100% 80%, 90% 100%, 10% 100%, 0 80%, 0 20%);
+            animation: shatter 0.8s cubic-bezier(.17,.67,.83,.67) forwards;
+            z-index: 1000; pointer-events: none;
+        }
+        @keyframes shatter {
+            0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) rotate(720deg) scale(0); }
+        }
+
+        /* --- UI PANELS --- */
+        .sidebar { width: 340px; display: flex; flex-direction: column; gap: 12px; }
+        .header { border-left: 4px solid var(--accent); padding-left: 15px; }
+        .title { font-size: 26px; font-weight: 900; letter-spacing: -1px; text-transform: uppercase; color: var(--text); margin-bottom: 2px;}
+        .subtitle { font-size: 10px; color: var(--accent); font-weight: 800; letter-spacing: 2px; }
+        
+        .stat-card { background: var(--panel); padding: 15px; border-radius: 6px; border: 1px solid #1e293b; position: relative; overflow: hidden; }
+        
+        .domain-gauge {
+            position: absolute; bottom: 0; left: 0; height: 3px; background: var(--ce-red); width: 0%;
+            transition: width 0.5s; box-shadow: 0 0 10px var(--ce-red);
+        }
+
+        .btn { 
+            background: rgba(220, 38, 38, 0.1); color: var(--accent); border: 1px solid var(--accent);
+            padding: 10px; border-radius: 4px; font-weight: 800; cursor: pointer; width: 100%; transition: all 0.2s;
+            text-transform: uppercase; font-size: 12px; letter-spacing: 1px; flex-shrink: 0;
+        }
+        .btn:hover { background: var(--accent); color: var(--text); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: #334155; color: #64748b; background: transparent; }
+        
+        /* SHOP STYLES */
+        .shop-container { background: var(--shop-bg); border: 1px solid var(--meta-blue); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; }
+        .shop-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 5px;}
+        .shop-title { color: var(--meta-blue); font-weight: 900; font-size: 14px; letter-spacing: 1px; }
+        .ego-points { color: var(--gold); font-weight: 900; font-size: 16px; text-shadow: 0 0 5px var(--gold); }
+        
+        .shop-items { max-height: 220px; overflow-y: auto; padding-right: 5px; }
+        .shop-items::-webkit-scrollbar { width: 5px; }
+        .shop-items::-webkit-scrollbar-track { background: var(--panel); }
+        .shop-items::-webkit-scrollbar-thumb { background: var(--meta-blue); border-radius: 5px; }
+        
+        .shop-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; }
+        .shop-btn { 
+            background: transparent; border: 1px solid var(--meta-blue); color: var(--meta-blue);
+            padding: 4px 8px; border-radius: 3px; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap; margin-left: 10px;
+        }
+        .shop-btn:hover:not(:disabled) { background: var(--meta-blue); color: #000; }
+        .shop-btn:disabled { border-color: #334; color: #556; cursor: not-allowed; }
+
+        #history { height: 120px; overflow-y: auto; font-family: monospace; font-size: 12px; color: #94a3b8; }
+        #history::-webkit-scrollbar { width: 5px; }
+        #history::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; }
+        
+        .thinking { display: none; color: var(--ce-red); font-size: 12px; font-weight: bold; animation: glitch 0.3s infinite; }
+
+        @keyframes glitch {
+            0% { transform: translate(0); text-shadow: 2px 0 var(--meta-blue); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); text-shadow: -2px 0 var(--ce-red); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+
+        .bf-text { animation: fadeUp 1s forwards; pointer-events: none; position: absolute; font-weight: 900; font-size: 40px; color: #fff; text-shadow: 0 0 10px #f00, 0 0 20px #000; z-index: 100; }
+        @keyframes fadeUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-50px); } }
+
+        /* --- ENDGAME SCREENS --- */
+        .fate-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 46px; font-weight: 900; color: #fff; text-shadow: 0 0 20px #000;
+            z-index: 2000; text-align: center; pointer-events: none;
+            background: rgba(0,0,0,0.85); padding: 30px; border: 4px solid var(--text); border-radius: 8px;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        .end-screen {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(10, 15, 24, 0.95); padding: 50px; border-radius: 8px;
+            text-align: center; z-index: 3000; width: 85%; pointer-events: none;
+            animation: popIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .end-title { font-size: 64px; font-weight: 900; margin: 0; text-transform: uppercase; }
+        .end-reason { font-size: 24px; font-weight: 700; color: #fff; letter-spacing: 4px; margin-top: 10px; }
+        .end-sub { font-size: 14px; color: #94a3b8; font-weight: 600; margin-top: 30px; letter-spacing: 2px; }
+        
+        @keyframes popIn {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        /* --- MAIN MENU --- */
+        .menu-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            overflow: hidden;
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+        .menu-overlay.hidden {
+            opacity: 0; transform: scale(1.1);
+            pointer-events: none;
+        }
+
+        /* Animated background grid */
+        .menu-bg-grid {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image:
+                linear-gradient(rgba(0, 242, 255, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.06) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: menu-grid-pan 20s linear infinite;
+        }
+        @keyframes menu-grid-pan {
+            0% { background-position: 0 0; }
+            100% { background-position: 50px 50px; }
+        }
+
+        /* Radial vignette */
+        .menu-vignette {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.7) 100%);
+            pointer-events: none;
+        }
+
+        /* Floating particle effects */
+        .menu-particles {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; overflow: hidden;
+        }
+        .particle {
+            position: absolute;
+            width: 3px; height: 3px;
+            background: var(--ce-red);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--ce-red), 0 0 12px var(--ce-red);
+            animation: float-up linear infinite;
+            opacity: 0;
+        }
+        .particle.blue { background: var(--meta-blue); box-shadow: 0 0 6px var(--meta-blue), 0 0 12px var(--meta-blue); }
+        @keyframes float-up {
+            0% { transform: translateY(0) scale(0); opacity: 0; }
+            10% { opacity: 1; transform: translateY(0) scale(1); }
+            90% { opacity: 0.6; }
+            100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+        }
+
+        /* Decorative kanji ring */
+        .menu-ring {
+            position: absolute;
+            width: 500px; height: 500px;
+            border: 1px solid rgba(220, 38, 38, 0.15);
+            border-radius: 50%;
+            animation: ring-rotate 30s linear infinite;
+        }
+        .menu-ring::before {
+            content: '天 地 人 魔 王 鬼 術 域 展 開 呪 力 滅 殺 破 壊';
+            position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+            font-size: 11px; color: rgba(220, 38, 38, 0.25);
+            letter-spacing: 8px; white-space: nowrap;
+            font-weight: 600;
+        }
+        .menu-ring-inner {
+            position: absolute;
+            width: 380px; height: 380px;
+            border: 1px solid rgba(0, 242, 255, 0.1);
+            border-radius: 50%;
+            animation: ring-rotate 25s linear infinite reverse;
+        }
+        .menu-ring-inner::before {
+            content: '♚ ♛ ♜ ♝ ♞ ♟ ♚ ♛ ♜ ♝ ♞ ♟';
+            position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+            font-size: 14px; color: rgba(0, 242, 255, 0.2);
+            letter-spacing: 12px; white-space: nowrap;
+        }
+        @keyframes ring-rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Title group */
+        .menu-content {
+            position: relative; z-index: 2;
+            display: flex; flex-direction: column; align-items: center;
+            animation: menu-fade-in 1.2s ease-out forwards;
+        }
+        @keyframes menu-fade-in {
+            0% { opacity: 0; transform: translateY(30px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .menu-label {
+            font-size: 11px; font-weight: 800; letter-spacing: 6px; text-transform: uppercase;
+            color: var(--ce-red); margin-bottom: 8px;
+            animation: label-glow 3s ease-in-out infinite alternate;
+        }
+        @keyframes label-glow {
+            from { text-shadow: 0 0 5px rgba(255, 0, 51, 0.3); }
+            to { text-shadow: 0 0 20px rgba(255, 0, 51, 0.6); }
+        }
+
+        .menu-title {
+            font-size: 72px; font-weight: 900; letter-spacing: -3px;
+            text-transform: uppercase; color: var(--text); line-height: 1;
+            text-shadow: 0 0 40px rgba(255, 0, 51, 0.3), 0 4px 20px rgba(0,0,0,0.8);
+            margin-bottom: 4px;
+        }
+        .menu-subtitle {
+            font-size: 14px; font-weight: 800; letter-spacing: 8px; text-transform: uppercase;
+            color: var(--meta-blue); margin-bottom: 50px;
+            text-shadow: 0 0 10px rgba(0, 242, 255, 0.4);
+        }
+
+        /* Separator line */
+        .menu-separator {
+            width: 120px; height: 2px; margin-bottom: 50px;
+            background: linear-gradient(90deg, transparent, var(--ce-red), transparent);
+            animation: separator-pulse 2s ease-in-out infinite alternate;
+        }
+        @keyframes separator-pulse {
+            from { opacity: 0.4; width: 100px; }
+            to { opacity: 1; width: 160px; }
+        }
+
+        /* Menu buttons */
+        .menu-buttons {
+            display: flex; flex-direction: column; align-items: center; gap: 14px;
+        }
+        .menu-btn {
+            position: relative;
+            background: transparent;
+            border: 2px solid var(--ce-red);
+            color: var(--text); font-family: 'Inter', sans-serif;
+            font-size: 15px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase;
+            padding: 16px 60px; border-radius: 4px; cursor: pointer;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        .menu-btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.15), transparent);
+            transition: left 0.5s;
+        }
+        .menu-btn:hover::before { left: 100%; }
+        .menu-btn:hover {
+            background: rgba(255, 0, 51, 0.12);
+            border-color: #ff3355;
+            box-shadow: 0 0 30px rgba(255, 0, 51, 0.3), inset 0 0 30px rgba(255, 0, 51, 0.05);
+            transform: translateY(-2px);
+        }
+        .menu-btn:active { transform: translateY(0); }
+
+        .menu-btn-secondary {
+            border-color: #1e293b; color: #64748b;
+            font-size: 12px; padding: 12px 40px;
+        }
+        .menu-btn-secondary:hover {
+            border-color: var(--meta-blue); color: var(--meta-blue);
+            background: rgba(0, 242, 255, 0.05);
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.15);
+        }
+
+        /* Footer */
+        .menu-footer {
+            position: absolute; bottom: 30px;
+            font-size: 10px; color: #334155; font-weight: 600; letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        /* Version badge */
+        .menu-version {
+            display: inline-block;
+            font-size: 10px; font-weight: 800; letter-spacing: 2px;
+            color: var(--gold); border: 1px solid rgba(250, 204, 21, 0.3);
+            padding: 3px 10px; border-radius: 3px; margin-top: 8px;
+        }
+
+        /* How to Play modal */
+        .how-to-play {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10000; justify-content: center; align-items: center;
+            background: rgba(3, 5, 8, 0.92);
+        }
+        .how-to-play.active { display: flex; }
+        .htp-panel {
+            background: var(--panel); border: 1px solid #1e293b;
+            border-radius: 8px; padding: 40px; max-width: 520px; width: 90%;
+            max-height: 80vh; overflow-y: auto;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        .htp-panel::-webkit-scrollbar { width: 5px; }
+        .htp-panel::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; }
+        .htp-title {
+            font-size: 22px; font-weight: 900; color: var(--text);
+            text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;
+            border-left: 4px solid var(--ce-red); padding-left: 12px;
+        }
+        .htp-section {
+            margin-bottom: 18px;
+        }
+        .htp-section h3 {
+            font-size: 12px; font-weight: 800; color: var(--meta-blue);
+            text-transform: uppercase; letter-spacing: 2px; margin: 0 0 8px 0;
+        }
+        .htp-section p {
+            font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;
+        }
+        .htp-section .htp-item {
+            display: flex; gap: 10px; align-items: flex-start; margin-bottom: 6px;
+        }
+        .htp-item-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        .htp-item-text { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+        .htp-item-text strong { color: var(--text); }
+        .htp-close {
+            margin-top: 24px; width: 100%;
+            background: transparent; border: 1px solid #334155;
+            color: #94a3b8; font-family: 'Inter', sans-serif;
+            font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+            padding: 12px; border-radius: 4px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .htp-close:hover { border-color: var(--text); color: var(--text); }
+
+        /* Container hidden by default until game starts */
+        .container { opacity: 0; transition: opacity 0.6s ease 0.3s; }
+        .container.visible { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<!-- MAIN MENU -->
+<div id="menu-overlay" class="menu-overlay">
+    <div class="menu-bg-grid"></div>
+    <div class="menu-vignette"></div>
+    <div class="menu-particles" id="menu-particles"></div>
+    <div class="menu-ring"></div>
+    <div class="menu-ring-inner"></div>
+
+    <div class="menu-content">
+        <div class="menu-label">Cursed Chess Engine</div>
+        <div class="menu-title">Boss Tien</div>
+        <div class="menu-subtitle">Modulo Era</div>
+        <div class="menu-separator"></div>
+        <div class="menu-buttons">
+            <button class="menu-btn" onclick="startGame()">Begin Battle</button>
+            <button class="menu-btn menu-btn-secondary" onclick="showHowToPlay()">How to Play</button>
+        </div>
+        <div class="menu-version">V8.0 Awakening</div>
+    </div>
+
+    <div class="menu-footer">An Anime Chess Experience</div>
+</div>
+
+<!-- HOW TO PLAY MODAL -->
+<div id="how-to-play" class="how-to-play">
+    <div class="htp-panel">
+        <div class="htp-title">How to Play</div>
+
+        <div class="htp-section">
+            <h3>The Basics</h3>
+            <p>Play chess against Boss Tien, a cursed AI opponent. Click a piece to select it, then click a highlighted square to move.</p>
+        </div>
+
+        <div class="htp-section">
+            <h3>Ego Points</h3>
+            <p>Earn ego points by making moves (+1) and capturing pieces (+8). Spend them in the Ego Store to activate powerful abilities.</p>
+        </div>
+
+        <div class="htp-section">
+            <h3>Boss Tien's Powers</h3>
+            <div class="htp-item">
+                <span class="htp-item-icon">👁</span>
+                <span class="htp-item-text"><strong>Metavision</strong> — Tien predicts your threats. Glowing blue squares reveal his awareness.</span>
+            </div>
+            <div class="htp-item">
+                <span class="htp-item-icon">🔴</span>
+                <span class="htp-item-text"><strong>Domain Expansion</strong> — When Tien's energy is high, the board transforms and hazard zones appear.</span>
+            </div>
+            <div class="htp-item">
+                <span class="htp-item-icon">💀</span>
+                <span class="htp-item-text"><strong>Ghost Squares</strong> — Where Tien captures, ghostly remnants block movement temporarily.</span>
+            </div>
+        </div>
+
+        <div class="htp-section">
+            <h3>Your Abilities (Ego Store)</h3>
+            <div class="htp-item">
+                <span class="htp-item-icon">🟢</span>
+                <span class="htp-item-text"><strong>Simple Domain</strong> — Clears all hazards and ghost squares.</span>
+            </div>
+            <div class="htp-item">
+                <span class="htp-item-icon">🌀</span>
+                <span class="htp-item-text"><strong>Force Flow State</strong> — Triggers endgame intensity early.</span>
+            </div>
+            <div class="htp-item">
+                <span class="htp-item-icon">🔥</span>
+                <span class="htp-item-text"><strong>Hinokami Kagura</strong> — King emits a burning aura that destroys adjacent enemies.</span>
+            </div>
+            <div class="htp-item">
+                <span class="htp-item-icon">⚡</span>
+                <span class="htp-item-text"><strong>Thunder Breathing</strong> — Move twice in one turn (no capture on second move).</span>
+            </div>
+        </div>
+
+        <button class="htp-close" onclick="hideHowToPlay()">Back to Menu</button>
+    </div>
+</div>
+
+<div class="container">
+    <div class="board-container">
+        <div id="board" class="board"></div>
+    </div>
+    
+    <div class="sidebar">
+        <div class="header">
+            <div class="title">Boss Tien</div>
+            <div class="subtitle">MODULO ERA • V8.0 AWAKENING</div>
+            <div id="think-label" class="thinking">DEVOURING THE FUTURE...</div>
+        </div>
+
+        <div class="stat-card">
+            <div style="font-size: 10px; color: #64748b; font-weight: 800;">CURSED ENERGY OUTPUT</div>
+            <div id="status" style="font-size: 14px; font-weight: 600; margin: 5px 0;">Standing Neutral</div>
+            <div style="width: 100%; height: 6px; background: #1e293b; border-radius: 3px; position: relative; margin-top: 10px;">
+                <div id="eval-bar" style="height: 100%; width: 50%; background: var(--text); transition: 0.5s;"></div>
+            </div>
+            <div id="domain-gauge" class="domain-gauge"></div>
+        </div>
+
+        <div class="shop-container">
+            <div class="shop-header">
+                <div class="shop-title">THE EGO STORE</div>
+                <div class="ego-points" id="ego-display">0 PTS</div>
+            </div>
+            
+            <div class="shop-items">
+                <div class="shop-item">
+                    <span title="Clears all Hazards (Rain of Nails) and Ghost Squares instantly.">Simple Domain</span>
+                    <button class="shop-btn" id="btn-shop-1" onclick="buySimpleDomain()">15 PTS</button>
+                </div>
+                <div class="shop-item">
+                    <span title="Triggers Flow State early, bypassing his Metavision predictions.">Force Flow State</span>
+                    <button class="shop-btn" id="btn-shop-2" onclick="buyFlowState()">25 PTS</button>
+                </div>
+                <div class="shop-item">
+                    <span title="Destroys one of Tien's random pieces (excluding the King) via Conceptual Hax.">Soul Dismantle</span>
+                    <button class="shop-btn" id="btn-shop-3" onclick="buySoulDismantle()">40 PTS</button>
+                </div>
+                <div class="shop-item" style="color: #ff6b4a;">
+                    <span title="King emits Heat Aura for 3 moves. Incinerates any enemy that lands adjacent to it.">Hinokami Kagura</span>
+                    <button class="shop-btn" style="border-color:#ff6b4a; color:#ff6b4a" id="btn-shop-4" onclick="buyTanjiro()">35 PTS</button>
+                </div>
+                <div class="shop-item" style="color: #facc15;">
+                    <span title="Grants Godspeed. Move twice this turn (second move cannot capture).">Thunder Breathing</span>
+                    <button class="shop-btn" style="border-color:#facc15; color:#facc15" id="btn-shop-5" onclick="buyZenitsu()">20 PTS</button>
+                </div>
+                <div class="shop-item" style="color: #a3e635;">
+                    <span title="Spatial Awareness: Blinds Metavision and weakens AI depth for 5 moves.">Beast Breathing</span>
+                    <button class="shop-btn" style="border-color:#a3e635; color:#a3e635" id="btn-shop-6" onclick="buyInosuke()">15 PTS</button>
+                </div>
+                <div class="shop-item" style="color: #c084fc;">
+                    <span title="Ui Ui Technique: Swaps your Pawn with a random Enemy Power Piece.">Soul Swap</span>
+                    <button class="shop-btn" style="border-color:#c084fc; color:#c084fc" id="btn-shop-7" onclick="buySoulSwap()">50 PTS</button>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn" onclick="init()">Restart Skirmish</button>
+
+        <div class="stat-card" style="flex-grow: 1;">
+            <div style="font-size: 10px; color: #64748b; font-weight: 800;">BATTLE RECORD</div>
+            <div id="history"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- MENU LOGIC ---
+function spawnMenuParticles() {
+    const container = document.getElementById('menu-particles');
+    if (!container) return;
+    for (let i = 0; i < 30; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle' + (Math.random() > 0.5 ? ' blue' : '');
+        p.style.left = Math.random() * 100 + '%';
+        p.style.bottom = '-10px';
+        p.style.animationDuration = (4 + Math.random() * 6) + 's';
+        p.style.animationDelay = (Math.random() * 8) + 's';
+        p.style.width = (2 + Math.random() * 3) + 'px';
+        p.style.height = p.style.width;
+        container.appendChild(p);
+    }
+}
+
+function startGame() {
+    const overlay = document.getElementById('menu-overlay');
+    overlay.classList.add('hidden');
+    document.querySelector('.container').classList.add('visible');
+    init();
+    setTimeout(() => { overlay.style.display = 'none'; }, 900);
+}
+
+function showHowToPlay() {
+    document.getElementById('how-to-play').classList.add('active');
+}
+function hideHowToPlay() {
+    document.getElementById('how-to-play').classList.remove('active');
+}
+
+// Spawn particles on load
+spawnMenuParticles();
+
+const EMPTY = 0, PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+const WHITE = 8, BLACK = 16, PIECE_MASK = 7, COLOR_MASK = 24;
+const SYMBOLS = {
+    [WHITE|PAWN]:"♙",[WHITE|KNIGHT]:"♘",[WHITE|BISHOP]:"♗",[WHITE|ROOK]:"♖",[WHITE|QUEEN]:"♕",[WHITE|KING]:"♔",
+    [BLACK|PAWN]:"♟",[BLACK|KNIGHT]:"♞",[BLACK|BISHOP]:"♝",[BLACK|ROOK]:"♜",[BLACK|QUEEN]:"♛",[BLACK|KING]:"♚"
+};
+
+let board = new Array(64).fill(EMPTY);
+let turn = WHITE;
+let historyLog = [];
+let hazards = new Set(); 
+let ghosts = new Map();  
+let adaptationMap = new Array(64).fill(0); 
+let metavisionTargets = []; 
+let domainActive = false;
+let directShotMode = false; 
+
+// Player Tools State
+let tanjiroAura = 0;
+let zenitsuActive = false;
+let zenitsuSecondMove = false;
+let inosukeAura = 0;
+
+// Draw/Win State
+let positionCounts = {};
+let gameOver = false;
+
+let castling = { wk: true, wq: true, bk: true, bq: true };
+let egoPoints = 0;
+let selected = -1, legals = [], thinking = false, lastMove = null;
+
+function init() {
+    board.fill(EMPTY);
+    const fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    let parts = fen.split(" ");
+    let idx = 0;
+    for (let r = 0; r < 8; r++) {
+        for (let c of parts[0].split("/")[r]) {
+            if (!isNaN(c)) idx += parseInt(c); 
+            else {
+                let color = (c === c.toUpperCase()) ? WHITE : BLACK;
+                let type = {p:PAWN,n:KNIGHT,b:BISHOP,r:ROOK,q:QUEEN,k:KING}[c.toLowerCase()];
+                board[idx++] = color | type;
+            }
+        }
+    }
+    
+    turn = WHITE;
+    historyLog = [];
+    hazards.clear(); ghosts.clear(); adaptationMap.fill(0); metavisionTargets = [];
+    domainActive = false; directShotMode = false; lastMove = null; selected = -1; legals = [];
+    thinking = false; castling = { wk: true, wq: true, bk: true, bq: true }; egoPoints = 0;
+    
+    tanjiroAura = 0; zenitsuActive = false; zenitsuSecondMove = false;
+    inosukeAura = 0; positionCounts = {}; gameOver = false;
+    
+    document.body.className = '';
+    document.body.style.filter = "none";
+    document.querySelectorAll('.fate-text, .end-screen').forEach(e => e.remove());
+
+    updateStatusText("Standing Neutral");
+    document.getElementById("eval-bar").style.width = "50%";
+    document.getElementById("domain-gauge").style.width = "0%";
+    document.getElementById("think-label").style.display = "none";
+    
+    updateShopUI();
+    render();
+}
+
+// Check if a specific square is under attack by a given color
+function isSquareAttacked(sq, attackerColor) {
+    const dirs = {
+        [KNIGHT]: [-17,-15,-10,-6,6,10,15,17],
+        [BISHOP]: [-9,-7,7,9],
+        [ROOK]: [-8,-1,1,8],
+        [KING]: [-9,-8,-7,-1,1,7,8,9]
+    };
+    
+    // Check Pawns
+    let pawnDirs = attackerColor === WHITE ? [7, 9] : [-7, -9];
+    for (let offset of pawnDirs) {
+        let t = sq + offset;
+        if (t >= 0 && t < 64 && Math.abs((sq%8)-(t%8)) <= 1 && board[t] === (attackerColor | PAWN)) return true;
+    }
+
+    // Check Knights and Kings
+    for (let off of dirs[KNIGHT]) {
+        let t = sq + off;
+        if (t >= 0 && t < 64 && Math.abs((sq%8)-(t%8)) <= 2 && board[t] === (attackerColor | KNIGHT)) return true;
+    }
+    for (let off of dirs[KING]) {
+        let t = sq + off;
+        if (t >= 0 && t < 64 && Math.abs((sq%8)-(t%8)) <= 1 && board[t] === (attackerColor | KING)) return true;
+    }
+
+    // Check Sliders
+    let sliders = [
+        { types: [BISHOP, QUEEN], offsets: [-9,-7,7,9] },
+        { types: [ROOK, QUEEN], offsets: [-8,-1,1,8] }
+    ];
+    for (let group of sliders) {
+        for (let off of group.offsets) {
+            let t = sq;
+            while (true) {
+                if (Math.abs((t%8)-((t+off)%8)) > 2) break;
+                t += off;
+                if (t < 0 || t > 63) break;
+                if (board[t]) {
+                    if ((board[t] & COLOR_MASK) === attackerColor && group.types.includes(board[t] & PIECE_MASK)) return true;
+                    break;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function evaluate() {
+    let score = 0; let pieceCount = 0;
+    let whiteKing = board.indexOf(WHITE | KING);
+    let blackKing = board.indexOf(BLACK | KING);
+
+    for (let i = 0; i < 64; i++) {
+        let p = board[i];
+        if (!p) continue;
+        pieceCount++;
+        let isW = (p & COLOR_MASK) === WHITE;
+        let type = p & PIECE_MASK;
+        let val = PIECE_VAL[type] || 0;
+        
+        let row = Math.floor(i / 8), col = i % 8;
+        let distCenter = Math.abs(3.5 - row) + Math.abs(3.5 - col);
+        val += (10 - distCenter); 
+
+        let enemyK = isW ? blackKing : whiteKing;
+        if (enemyK !== -1) {
+            let kRow = Math.floor(enemyK / 8), kCol = enemyK % 8;
+            let dist = Math.abs(col - kCol) + Math.abs(row - kRow);
+            
+            if (directShotMode && !isW) {
+                val += (800 / (dist + 1)); 
+                if (dist < 2) val += 200;  
+            } else {
+                if (dist < 4) val += (50 / (dist + 1));
+            }
+            if (!isW && tanjiroAura > 0 && dist <= 1) val -= 10000;
+        }
+
+        if (!isW && type !== KING) val -= adaptationMap[i] * 50; 
+        score += isW ? val : -val;
+    }
+
+    if (pieceCount <= 10 && !directShotMode) {
+        directShotMode = true;
+        document.body.classList.add('flow-state');
+        updateStatusText(domainActive ? "THE CLASH: DOMAIN + FLOW" : "FLOW STATE: DIRECT SHOT");
+    }
+
+    return turn === WHITE ? score : -score;
+}
+
+function getLegalMoves(color, isSearch = false) {
+    let moves = [];
+    const dirs = {
+        [KNIGHT]: [-17,-15,-10,-6,6,10,15,17], [BISHOP]: [-9,-7,7,9],
+        [ROOK]: [-8,-1,1,8], [QUEEN]: [-9,-8,-7,-1,1,7,8,9], [KING]: [-9,-8,-7,-1,1,7,8,9]
+    };
+
+    for (let i = 0; i < 64; i++) {
+        let p = board[i];
+        if (!p || (p & COLOR_MASK) !== color) continue;
+        let type = p & PIECE_MASK;
+
+        if (type === PAWN) {
+            let d = color === WHITE ? -8 : 8;
+            if (!board[i+d] && !ghosts.has(i+d)) {
+                moves.push({f:i, t:i+d});
+                if (((color===WHITE && i>=48) || (color===BLACK && i<=15)) && !board[i+d*2] && !ghosts.has(i+d*2)) moves.push({f:i, t:i+d*2});
+            }
+            for (let c of [d-1, d+1]) {
+                if (Math.abs((i%8)-((i+c)%8)) > 1) continue;
+                if ((board[i+c] && (board[i+c] & COLOR_MASK) !== color) && !ghosts.has(i+c)) moves.push({f:i, t:i+c});
+            }
+        } else {
+            for (let off of dirs[type]) {
+                let t = i;
+                while (true) {
+                    if (Math.abs((t%8)-((t+off)%8)) > 2) break;
+                    t += off;
+                    if (t < 0 || t > 63 || ghosts.has(t)) break; 
+                    if (board[t]) {
+                        if ((board[t] & COLOR_MASK) !== color) moves.push({f:i, t:t});
+                        break;
+                    }
+                    moves.push({f:i, t:t});
+                    if (type === KNIGHT || type === KING) break;
+                }
+            }
+        }
+    }
+
+    if (!isSearch) {
+        let kPos = color === WHITE ? 60 : 4;
+        if (board[kPos] === (color | KING)) {
+            if (color === WHITE) {
+                if (castling.wk && !board[61] && !board[62] && !ghosts.has(61) && !ghosts.has(62)) moves.push({f: 60, t: 62});
+                if (castling.wq && !board[59] && !board[58] && !board[57] && !ghosts.has(59) && !ghosts.has(58)) moves.push({f: 60, t: 58});
+            } else {
+                if (castling.bk && !board[5] && !board[6] && !ghosts.has(5) && !ghosts.has(6)) moves.push({f: 4, t: 6});
+                if (castling.bq && !board[3] && !board[2] && !board[1] && !ghosts.has(3) && !ghosts.has(2)) moves.push({f: 4, t: 2});
+            }
+        }
+    }
+
+    return moves.filter(m => {
+        if (!isSearch && zenitsuSecondMove && color === WHITE && board[m.t] !== EMPTY) return false;
+        if (isSearch) return true; // AI search relies on 20000pt eval penalty for king captures
+        
+        let oldTo = board[m.t], oldFrom = board[m.f];
+        board[m.t] = oldFrom; board[m.f] = EMPTY;
+        let k = board.indexOf(color | KING);
+        let safe = true;
+        if (k !== -1) safe = !isSquareAttacked(k, color === WHITE ? BLACK : WHITE);
+        board[m.f] = oldFrom; board[m.t] = oldTo;
+        return safe;
+    });
+}
+
+const PIECE_VAL = [0, 100, 320, 330, 500, 900, 20000];
+
+function search(depth, alpha, beta) {
+    if (depth === 0) return evaluate();
+    let moves = getLegalMoves(turn, true); 
+    if (!moves.length) return -10000;
+    
+    let best = -Infinity;
+    for (let m of moves) {
+        let oldTo = board[m.t], oldFrom = board[m.f];
+        if ((oldFrom & PIECE_MASK) === PAWN && (m.t < 8 || m.t > 55)) board[m.t] = (oldFrom & COLOR_MASK) | QUEEN;
+        else board[m.t] = oldFrom;
+        board[m.f] = EMPTY;
+        
+        turn = turn === WHITE ? BLACK : WHITE;
+        let score = -search(depth - 1, -beta, -alpha);
+        turn = turn === WHITE ? BLACK : WHITE;
+        
+        board[m.f] = oldFrom; board[m.t] = oldTo;
+        
+        best = Math.max(best, score);
+        alpha = Math.max(alpha, score);
+        if (alpha >= beta) break;
+    }
+    return best;
+}
+
+function predictMetavision() {
+    metavisionTargets = [];
+    if (directShotMode || inosukeAura > 0) return; 
+    let savedTurn = turn; turn = WHITE;
+    let moves = getLegalMoves(WHITE, true);
+    turn = savedTurn; 
+    for(let m of moves) if(board[m.t] && (board[m.t] & COLOR_MASK) === BLACK) metavisionTargets.push(m.t);
+    metavisionTargets = metavisionTargets.slice(0, 2);
+}
+
+function aiMove() {
+    if (gameOver) return;
+    thinking = true;
+    const label = document.getElementById("think-label");
+    label.style.display = "block";
+    label.textContent = directShotMode ? "DIRECT SHOT: LOCKING TARGET..." : "DEVOURING THE FUTURE...";
+
+    setTimeout(() => {
+        let moves = getLegalMoves(BLACK, false); 
+        let bestMove = null, bestScore = -Infinity;
+        
+        moves.sort((a, b) => {
+            let scoreA = board[a.t] ? PIECE_VAL[board[a.t] & PIECE_MASK] : 0;
+            let scoreB = board[b.t] ? PIECE_VAL[board[b.t] & PIECE_MASK] : 0;
+            return scoreB - scoreA;
+        });
+
+        let searchDepth = directShotMode ? 4 : 3;
+        if (inosukeAura > 0) searchDepth = Math.max(1, searchDepth - 1);
+
+        for (let m of moves) {
+            let oldTo = board[m.t], oldFrom = board[m.f];
+            if (Math.abs(m.f - m.t) === 2 && (oldFrom & PIECE_MASK) === KING) continue;
+            if ((oldFrom & PIECE_MASK) === PAWN && (m.t < 8 || m.t > 55)) board[m.t] = BLACK | QUEEN;
+            else board[m.t] = oldFrom;
+            board[m.f] = EMPTY;
+            
+            turn = WHITE;
+            let score = -search(searchDepth, -Infinity, Infinity);
+            turn = BLACK;
+            
+            board[m.f] = oldFrom; board[m.t] = oldTo;
+            if (score > bestScore) { bestScore = score; bestMove = m; }
+        }
+        
+        if (bestMove) executeMove(bestMove);
+        if (!gameOver) predictMetavision(); 
+        thinking = false;
+        label.style.display = "none";
+        render(); 
+    }, 500);
+}
+
+function triggerBlackFlash(sqIdx) {
+    const sq = document.querySelectorAll('.square')[sqIdx];
+    if (!sq) return;
+    const rect = sq.getBoundingClientRect();
+    const text = document.createElement('div');
+    text.className = 'bf-text';
+    text.textContent = 'BLACK FLASH';
+    text.style.left = `${rect.left}px`;
+    text.style.top = `${rect.top}px`;
+    document.body.appendChild(text);
+    setTimeout(() => text.remove(), 1000);
+    document.getElementById('board').classList.add('shake');
+    setTimeout(() => document.getElementById('board').classList.remove('shake'), 400);
+}
+
+function spawnPuzzlePieces(sqIdx, isWhiteCapturing) {
+    const sq = document.querySelectorAll('.square')[sqIdx];
+    if (!sq) return;
+    const rect = sq.getBoundingClientRect();
+    for(let i=0; i<12; i++) {
+        let p = document.createElement('div');
+        p.className = 'puzzle-piece';
+        p.style.left = (rect.left + 25) + 'px';
+        p.style.top = (rect.top + 25) + 'px';
+        p.style.backgroundColor = isWhiteCapturing ? 'var(--meta-blue)' : 'var(--ce-red)';
+        p.style.boxShadow = `0 0 8px ${isWhiteCapturing ? 'var(--meta-blue)' : 'var(--ce-red)'}`;
+        p.style.setProperty('--tx', (Math.random() * 200 - 100) + 'px');
+        p.style.setProperty('--ty', (Math.random() * 200 - 100) + 'px'); 
+        document.body.appendChild(p);
+        setTimeout(() => p.remove(), 800);
+    }
+}
+
+function updateDomain(evalScore) {
+    const gauge = document.getElementById('domain-gauge');
+    const absScore = Math.abs(evalScore);
+    const progress = Math.min(100, (absScore / 1000) * 100);
+    gauge.style.width = `${progress}%`;
+
+    if (progress > 70 && !domainActive && turn === BLACK) {
+        domainActive = true;
+        document.body.classList.add('domain-active');
+        updateStatusText(directShotMode ? "THE CLASH: DOMAIN + FLOW" : "DOMAIN EXPANSION: SILENT ALTAR");
+        for(let i=0; i<3; i++) {
+            let rSq = Math.floor(Math.random()*64);
+            if(board[rSq] === EMPTY) hazards.add(rSq);
+        }
+    } else if (progress < 50 && domainActive) {
+        domainActive = false;
+        document.body.classList.remove('domain-active');
+        updateStatusText(directShotMode ? "FLOW STATE: DIRECT SHOT" : "DOMAIN COLLAPSED");
+        hazards.clear();
+    }
+}
+
+function updateStatusText(txt) {
+    const status = document.getElementById("status");
+    status.textContent = txt;
+    if(domainActive && directShotMode) status.style.color = "var(--ce-red)";
+    else if(domainActive) status.style.color = "var(--ce-red)";
+    else if(directShotMode) status.style.color = "var(--meta-blue)";
+    else status.style.color = "var(--text)";
+}
+
+// --- EGO STORE LOGIC ---
+function updateShopUI() {
+    document.getElementById('ego-display').textContent = `${egoPoints} PTS`;
+    document.getElementById('btn-shop-1').disabled = egoPoints < 15;
+    document.getElementById('btn-shop-2').disabled = egoPoints < 25 || directShotMode;
+    document.getElementById('btn-shop-3').disabled = egoPoints < 40;
+    
+    document.getElementById('btn-shop-4').disabled = egoPoints < 35 || tanjiroAura > 0;
+    document.getElementById('btn-shop-5').disabled = egoPoints < 20 || zenitsuActive || zenitsuSecondMove;
+    document.getElementById('btn-shop-6').disabled = egoPoints < 15 || inosukeAura > 0;
+    
+    let hasPawn = board.includes(WHITE|PAWN);
+    let hasPower = false;
+    for(let i=0; i<64; i++) {
+        let p = board[i];
+        if ((p&COLOR_MASK)===BLACK && [ROOK, KNIGHT, BISHOP].includes(p&PIECE_MASK)) { hasPower = true; break; }
+    }
+    document.getElementById('btn-shop-7').disabled = egoPoints < 50 || !hasPawn || !hasPower;
+}
+
+function buySimpleDomain() {
+    if (egoPoints >= 15 && !thinking && !gameOver) {
+        egoPoints -= 15; hazards.clear(); ghosts.clear();
+        historyLog.push("🟢 Simple Domain Deployed"); updateShopUI(); render();
+    }
+}
+function buyFlowState() {
+    if (egoPoints >= 25 && !directShotMode && !thinking && !gameOver) {
+        egoPoints -= 25; directShotMode = true; document.body.classList.add('flow-state');
+        historyLog.push("🌀 Forced Flow State"); updateShopUI(); render();
+    }
+}
+function buySoulDismantle() {
+    if (egoPoints >= 40 && !thinking && !gameOver) {
+        let targets = [];
+        for(let i=0; i<64; i++) if(board[i] && (board[i]&COLOR_MASK)===BLACK && (board[i]&PIECE_MASK)!==KING) targets.push(i);
+        if(targets.length > 0) {
+            let t = targets[Math.floor(Math.random()*targets.length)];
+            let p = board[t]; board[t] = EMPTY; egoPoints -= 40; spawnPuzzlePieces(t, true);
+            historyLog.push(`🔪 Soul Dismantle on ${SYMBOLS[p]}`); 
+            updateShopUI(); 
+            if(checkGameEnd()) return;
+            render();
+        }
+    }
+}
+function buyTanjiro() {
+    if (egoPoints >= 35 && !thinking && !gameOver) {
+        egoPoints -= 35; tanjiroAura = 4;
+        historyLog.push("🔥 Hinokami Kagura: Heat Aura Active!"); updateShopUI(); render();
+    }
+}
+function buyZenitsu() {
+    if (egoPoints >= 20 && !thinking && !gameOver) {
+        egoPoints -= 20; zenitsuActive = true;
+        historyLog.push("⚡ Thunder Breathing: Godspeed Active!"); updateShopUI(); render();
+    }
+}
+function buyInosuke() {
+    if (egoPoints >= 15 && !thinking && !gameOver) {
+        egoPoints -= 15; inosukeAura = 6; metavisionTargets = []; 
+        historyLog.push("🐗 Beast Breathing: Metavision Blinded!"); updateShopUI(); render();
+    }
+}
+function buySoulSwap() {
+    if (egoPoints >= 50 && !thinking && !gameOver) {
+        let pawns = [], powers = [];
+        for(let i=0; i<64; i++) {
+            if (board[i] === (WHITE|PAWN)) pawns.push(i);
+            let p = board[i];
+            if ((p&COLOR_MASK)===BLACK && [ROOK, KNIGHT, BISHOP].includes(p&PIECE_MASK)) powers.push(i);
+        }
+        if (pawns.length > 0 && powers.length > 0) {
+            egoPoints -= 50;
+            let p1 = pawns[Math.floor(Math.random()*pawns.length)];
+            let p2 = powers[Math.floor(Math.random()*powers.length)];
+            let temp = board[p1]; board[p1] = board[p2]; board[p2] = temp;
+            spawnPuzzlePieces(p1, true); spawnPuzzlePieces(p2, true);
+            historyLog.push("🔄 Ui Ui Technique: Soul Swap!"); updateShopUI(); render();
+        }
+    }
+}
+
+// --- WIN & LOSE LOGIC ---
+function endGame(result, reason) {
+    gameOver = true;
+    thinking = false;
+    document.getElementById("think-label").style.display = "none";
+    
+    let overlay = document.createElement("div");
+    overlay.className = "end-screen";
+    
+    if (result === "PLAYER_WIN") {
+        document.body.className = "flow-state"; 
+        overlay.innerHTML = `
+            <div class="end-title" style="color: var(--meta-blue); text-shadow: 0 0 25px var(--meta-blue);">VICTORY</div>
+            <div class="end-reason">${reason}</div>
+            <div class="end-sub">THE EGO SURPASSES THE MODULO ERA</div>
+        `;
+        overlay.style.border = "2px solid var(--meta-blue)";
+        overlay.style.boxShadow = "0 0 50px rgba(0, 242, 255, 0.3)";
+    } else if (result === "TIEN_WIN") {
+        document.body.className = "domain-active"; 
+        overlay.innerHTML = `
+            <div class="end-title" style="color: var(--ce-red); text-shadow: 0 0 25px var(--ce-red);">DEFEAT</div>
+            <div class="end-reason">${reason}</div>
+            <div class="end-sub">METAVISION FORESAW YOUR DEMISE</div>
+        `;
+        overlay.style.border = "2px solid var(--ce-red)";
+        overlay.style.boxShadow = "0 0 50px rgba(255, 0, 51, 0.3)";
+    } else {
+        overlay.innerHTML = `
+            <div class="end-title" style="color: #cbd5e1; text-shadow: 0 0 25px #cbd5e1;">DRAW</div>
+            <div class="end-reason">${reason}</div>
+        `;
+        overlay.style.border = "2px solid #cbd5e1";
+    }
+    
+    document.querySelector('.board-container').appendChild(overlay);
+    render();
+}
+
+function checkGameEnd() {
+    let wk = board.indexOf(WHITE | KING);
+    let bk = board.indexOf(BLACK | KING);
+    
+    if (wk === -1) { endGame("TIEN_WIN", "YOUR KING WAS CAPTURED"); return true; }
+    if (bk === -1) { endGame("PLAYER_WIN", "BOSS TIEN ELIMINATED"); return true; }
+    
+    // Check if player has any pieces left besides King
+    let whitePieces = 0;
+    for(let i=0; i<64; i++) {
+        if(board[i] && (board[i] & COLOR_MASK) === WHITE && (board[i] & PIECE_MASK) !== KING) {
+            whitePieces++;
+        }
+    }
+    if (whitePieces === 0) { endGame("TIEN_WIN", "ALL YOUR PIECES DEVOURED"); return true; }
+    
+    let currentMoves = getLegalMoves(turn, false);
+    if (currentMoves.length === 0) {
+        let kPos = board.indexOf(turn | KING);
+        let inCheck = isSquareAttacked(kPos, turn === WHITE ? BLACK : WHITE);
+        
+        if (turn === BLACK) {
+            if (inCheck) { endGame("PLAYER_WIN", "CHECKMATE"); return true; }
+            else { endGame("DRAW", "STALEMATE"); return true; }
+        } else {
+            if (inCheck) { endGame("TIEN_WIN", "CHECKMATE"); return true; }
+            else { endGame("DRAW", "STALEMATE"); return true; }
+        }
+    }
+    return false;
+}
+
+function executeMove(m) {
+    if (gameOver) return;
+    let captured = board[m.t]; let piece = board[m.f]; let isWhite = (piece & COLOR_MASK) === WHITE;
+    
+    if (isWhite) {
+        egoPoints += 1; adaptationMap[m.t] += 1; 
+        if (captured) egoPoints += 8; 
+    }
+
+    if (isWhite && captured) {
+        spawnPuzzlePieces(m.t, true);
+        if (egoPoints >= 100 && hazards.size > 0) {
+            triggerBlackFlash(m.t);
+            let hArray = Array.from(hazards);
+            let toRemove = hArray[Math.floor(Math.random() * hArray.length)];
+            hazards.delete(toRemove);
+            historyLog.push("💥 100% EGO: BLACK FLASH CLEARED A HAZARD!");
+        }
+    } else if (captured && !isWhite) {
+        spawnPuzzlePieces(m.t, false);
+        ghosts.set(m.t, 2); triggerBlackFlash(m.t);
+    }
+
+    if (piece === (WHITE|KING)) { castling.wk = false; castling.wq = false; }
+    if (piece === (BLACK|KING)) { castling.bk = false; castling.bq = false; }
+
+    let isCastle = (piece & PIECE_MASK) === KING && Math.abs(m.f - m.t) === 2;
+    if (isCastle) {
+        if (m.t === 62) { board[61] = board[63]; board[63] = EMPTY; }
+        if (m.t === 58) { board[59] = board[56]; board[56] = EMPTY; }
+        if (m.t === 6)  { board[5] = board[7]; board[7] = EMPTY; }
+        if (m.t === 2)  { board[3] = board[0]; board[0] = EMPTY; }
+        board[m.t] = board[m.f];
+    } else if ((piece & PIECE_MASK) === PAWN && (m.t < 8 || m.t > 55)) {
+        board[m.t] = (piece & COLOR_MASK) | QUEEN;
+    } else {
+        board[m.t] = board[m.f];
+    }
+    board[m.f] = EMPTY;
+
+    if (hazards.has(m.t) && isWhite) {
+        board[m.t] = EMPTY; hazards.delete(m.t); triggerBlackFlash(m.t);
+    }
+
+    if (!isWhite && tanjiroAura > 0) {
+        let wKing = board.indexOf(WHITE | KING);
+        if (wKing !== -1) {
+            let r1 = Math.floor(wKing/8), c1 = wKing%8;
+            let r2 = Math.floor(m.t/8), c2 = m.t%8;
+            if (Math.abs(r1-r2)<=1 && Math.abs(c1-c2)<=1) {
+                board[m.t] = EMPTY;
+                historyLog.push("🔥 Hinokami Kagura incinerated Boss Tien!");
+                spawnPuzzlePieces(m.t, true);
+            }
+        }
+    }
+
+    lastMove = m;
+    for (let [sq, t] of ghosts) {
+        if (t <= 1) ghosts.delete(sq); else ghosts.set(sq, t - 1);
+    }
+
+    if (isWhite && !zenitsuSecondMove) {
+        if (tanjiroAura > 0) tanjiroAura--;
+        if (inosukeAura > 0) inosukeAura--;
+    }
+
+    if (isWhite && zenitsuActive) {
+        zenitsuActive = false; zenitsuSecondMove = true; turn = WHITE;
+        historyLog.push("⚡ Godspeed: Second Move!");
+    } else if (isWhite && zenitsuSecondMove) {
+        zenitsuSecondMove = false; turn = BLACK;
+    } else {
+        turn = turn === WHITE ? BLACK : WHITE;
+    }
+
+    let posKey = board.join(',') + '|' + turn + '|' + castling.wk + castling.wq + castling.bk + castling.bq;
+    positionCounts[posKey] = (positionCounts[posKey] || 0) + 1;
+    if (positionCounts[posKey] >= 3) {
+        endGame("DRAW", "CONCEPTUAL STAGNATION (3-FOLD LOOP)");
+        return;
+    }
+
+    if (checkGameEnd()) return; 
+
+    let ev = evaluate();
+    document.getElementById("eval-bar").style.width = `${50 + (ev/40)}%`;
+    updateDomain(ev); updateShopUI(); render();
+    
+    if (turn === BLACK && !thinking && !gameOver) aiMove();
+}
+
+function onSqClick(i) {
+    if (turn !== WHITE || thinking || gameOver) return;
+    if (selected === i) { selected = -1; legals = []; render(); return; }
+    let move = legals.find(m => m.t === i);
+    if (move) {
+        executeMove(move); selected = -1; legals = []; return;
+    }
+    if (board[i] && (board[i] & COLOR_MASK) === WHITE) {
+        selected = i; legals = getLegalMoves(WHITE, false).filter(m => m.f === i); render();
+    }
+}
+
+function render() {
+    const b = document.getElementById("board");
+    b.innerHTML = '';
+    for (let i = 0; i < 64; i++) {
+        const sq = document.createElement("div");
+        sq.className = `square ${(Math.floor(i/8)+i)%2 ? 'dark':'light'}`;
+        if (selected === i) sq.classList.add("selected");
+        if (lastMove && (lastMove.f === i || lastMove.t === i)) sq.classList.add("last-move");
+        if (metavisionTargets.includes(i) && turn === WHITE) sq.classList.add("metavision-trail");
+        if (hazards.has(i)) sq.classList.add("hazard-square");
+        if (ghosts.has(i)) sq.classList.add("ghost-square");
+        if (legals.find(m => m.t === i)) sq.innerHTML = '<div style="width:15px;height:15px;background:rgba(0,0,0,0.3);border-radius:50%;z-index:2;"></div>';
+        
+        if (tanjiroAura > 0 && board[i] === (WHITE|KING)) sq.classList.add("tanjiro-aura");
+
+        if (board[i]) {
+            const p = document.createElement("div");
+            p.className = "piece";
+            p.textContent = SYMBOLS[board[i]];
+            p.style.color = (board[i] & COLOR_MASK) === WHITE ? "#fff" : "#000";
+            if (domainActive && (board[i] & COLOR_MASK) === BLACK) p.style.textShadow = "0 0 10px var(--ce-red)";
+            if (directShotMode && (board[i] & COLOR_MASK) === BLACK) p.classList.add("direct-shot-aura");
+            sq.appendChild(p);
+        }
+        sq.onclick = () => onSqClick(i);
+        b.appendChild(sq);
+    }
+    document.getElementById("history").innerHTML = historyLog.slice().reverse().map(m => `<div>${m}</div>`).join("");
+}
+
+// Game no longer auto-starts — it begins when menu "Begin Battle" is clicked.
+</script>
+</body>
+</html>
